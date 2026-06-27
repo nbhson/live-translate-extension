@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Translate (EN -> VI)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <!-- Header App Toolbar -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo-dot"></div>
+      <div class="title-area">
+        <h1>Live Translate</h1>
+        <span class="subtitle">English ➜ Tiếng Việt</span>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <!-- Audio Source Selector -->
+      <select id="audioSourceSelect" class="btn-icon-wide" title="Chọn nguồn âm thanh">
+        <option value="tab">🌐 Âm thanh Tab</option>
+        <option value="mic">🎙️ Microphone</option>
+      </select>
+
+      <!-- Start/Stop Button -->
+      <button id="toggleBtn" class="btn btn-primary" title="Bắt đầu ghi âm">
+        <svg id="playIcon" viewBox="0 0 24 24">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <svg id="stopIcon" viewBox="0 0 24 24" style="display: none;">
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+        </svg>
+        <span id="btnText">Bắt đầu</span>
+      </button>
+
+      <!-- Clear Button -->
+      <button id="clearBtn" class="btn btn-icon" title="Xóa nội dung">
+        <svg viewBox="0 0 24 24">
+          <path d="M15 4V3H9v1H4v2h16V4zM6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h2v10H8V9zm4 0h2v10h-2V9z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Split Layout -->
+  <main class="split-layout">
+    <!-- Top Area: English -->
+    <section class="panel-section" id="englishSection">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="flag-icon">🇬🇧</span>
+          <h2>English (Original)</h2>
+        </div>
+        <div class="panel-actions">
+          <button id="copyEnBtn" class="btn-action-icon" title="Sao chép tiếng Anh">
+            <svg viewBox="0 0 24 24">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="panel-content scrollable" id="englishContent">
+        <div class="placeholder-text" id="enPlaceholder">Nhấp "Bắt đầu" và nói tiếng Anh để ghi âm...</div>
+        <div class="transcript-log" id="englishLog"></div>
+        <div class="interim-text" id="englishInterim"></div>
+      </div>
+    </section>
+
+    <!-- Glowing Divider -->
+    <div class="glow-divider"></div>
+
+    <!-- Bottom Area: Vietnamese -->
+    <section class="panel-section" id="vietnameseSection">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="flag-icon">🇻🇳</span>
+          <h2>Tiếng Việt (Bản dịch)</h2>
+        </div>
+        <div class="panel-actions">
+          <button id="copyViBtn" class="btn-action-icon" title="Sao chép bản dịch">
+            <svg viewBox="0 0 24 24">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="panel-content scrollable" id="vietnameseContent">
+        <div class="placeholder-text" id="viPlaceholder">Bản dịch tiếng Việt sẽ hiển thị ở đây...</div>
+        <div class="transcript-log" id="vietnameseLog"></div>
+        <div class="interim-text" id="vietnameseInterim"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer Toolbar -->
+  <footer class="app-footer">
+    <div class="footer-status" id="statusText">Sẵn sàng</div>
+    <div class="footer-options">
+      <label class="toggle-switch">
+        <input type="checkbox" id="autoScrollCheck" checked>
+        <span class="slider"></span>
+        <span class="toggle-label">Tự động cuộn</span>
+      </label>
+    </div>
+  </footer>
+
+  <!-- Permission Overlay (Hidden by default) -->
+  <div class="overlay" id="permissionOverlay" style="display: none;">
+    <div class="overlay-card">
+      <div class="overlay-icon">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      </div>
+      <h3>Yêu cầu quyền Microphone</h3>
+      <p>Cần được cấp quyền truy cập microphone để hoạt động. Vui lòng bấm vào nút bên dưới để cấp quyền.</p>
+      <button class="btn btn-primary btn-block" id="grantPermissionBtn">Cấp quyền Micro</button>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
