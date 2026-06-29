@@ -12,6 +12,12 @@ const MAX_INTERIM_LENGTH = 100; // 100 characters to force-finalize
 let finalizedEnPhrases = [];
 let finalizedViPhrases = [];
 
+// Gemini config state
+let geminiConfig = {
+  apiKey: '',
+  model: 'gemini-2.5-flash'
+};
+
 // DOM Elements
 const toggleBtn = document.getElementById('toggleBtn');
 const playIcon = document.getElementById('playIcon');
@@ -35,9 +41,40 @@ const copyViBtn = document.getElementById('copyViBtn');
 const permissionOverlay = document.getElementById('permissionOverlay');
 const grantPermissionBtn = document.getElementById('grantPermissionBtn');
 
+// Tab Navigation Elements
+const tabLive = document.getElementById('tabLive');
+const tabSummary = document.getElementById('tabSummary');
+const liveTabContent = document.getElementById('liveTabContent');
+const summaryTabContent = document.getElementById('summaryTabContent');
+
+// Settings Overlay Elements
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsOverlay = document.getElementById('settingsOverlay');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const toggleApiKeyVisibilityBtn = document.getElementById('toggleApiKeyVisibilityBtn');
+const geminiModelSelect = document.getElementById('geminiModelSelect');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+
+// Summary Tab Elements
+const apiWarningCard = document.getElementById('apiWarningCard');
+const configNowBtn = document.getElementById('configNowBtn');
+const summaryLangSelect = document.getElementById('summaryLang');
+const summaryDetailSelect = document.getElementById('summaryDetail');
+const generateSummaryBtn = document.getElementById('generateSummaryBtn');
+const copySummaryBtn = document.getElementById('copySummaryBtn');
+const summaryPlaceholder = document.getElementById('summaryPlaceholder');
+const summaryMarkdown = document.getElementById('summaryMarkdown');
+const summaryLoading = document.getElementById('summaryLoading');
+const summaryContent = document.getElementById('summaryContent');
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
+  setupTabNavigation();
+  setupSettingsOverlay();
+  setupSummaryFeatures();
+  await loadGeminiConfig();
   await checkAndHidePermissionOverlay();
 });
 
@@ -514,6 +551,13 @@ function clearContent() {
   vietnameseLog.innerHTML = '';
   vietnameseInterim.innerText = '';
   
+  // Clear summary output
+  summaryPlaceholder.style.display = 'flex';
+  summaryMarkdown.style.display = 'none';
+  summaryMarkdown.innerHTML = '';
+  summaryMarkdown.removeAttribute('data-raw-text');
+  copySummaryBtn.style.display = 'none';
+  
   showPlaceholders();
   showStatus('Đã xóa lịch sử');
   setTimeout(() => {
@@ -527,6 +571,314 @@ function clearContent() {
       showStatus('Sẵn sàng');
     }
   }, 1000);
+}
+
+// SETUP & GEMINI INTEGRATION LOGIC
+
+// Setup Tab Switching Navigation
+function setupTabNavigation() {
+  tabLive.addEventListener('click', () => {
+    tabLive.classList.add('active');
+    tabSummary.classList.remove('active');
+    liveTabContent.classList.add('active-tab-content');
+    summaryTabContent.classList.remove('active-tab-content');
+  });
+
+  tabSummary.addEventListener('click', () => {
+    tabSummary.classList.add('active');
+    tabLive.classList.remove('active');
+    summaryTabContent.classList.add('active-tab-content');
+    liveTabContent.classList.remove('active-tab-content');
+    updateApiWarningState();
+  });
+}
+
+// Setup Settings Modal Overlay
+function setupSettingsOverlay() {
+  settingsBtn.addEventListener('click', () => {
+    apiKeyInput.value = geminiConfig.apiKey;
+    geminiModelSelect.value = geminiConfig.model;
+    settingsOverlay.style.display = 'flex';
+  });
+
+  closeSettingsBtn.addEventListener('click', () => {
+    settingsOverlay.style.display = 'none';
+  });
+
+  configNowBtn.addEventListener('click', () => {
+    apiKeyInput.value = geminiConfig.apiKey;
+    geminiModelSelect.value = geminiConfig.model;
+    settingsOverlay.style.display = 'flex';
+  });
+
+  toggleApiKeyVisibilityBtn.addEventListener('click', () => {
+    if (apiKeyInput.type === 'password') {
+      apiKeyInput.type = 'text';
+      toggleApiKeyVisibilityBtn.innerText = '🔒';
+    } else {
+      apiKeyInput.type = 'password';
+      toggleApiKeyVisibilityBtn.innerText = '👁️';
+    }
+  });
+
+  saveSettingsBtn.addEventListener('click', () => {
+    const key = apiKeyInput.value.trim();
+    const model = geminiModelSelect.value;
+    
+    chrome.storage.local.set({ geminiApiKey: key, geminiModel: model }, () => {
+      geminiConfig.apiKey = key;
+      geminiConfig.model = model;
+      updateApiWarningState();
+      settingsOverlay.style.display = 'none';
+      showStatus('Đã lưu cấu hình Gemini');
+    });
+  });
+
+  // Close overlay if clicking outside the modal card
+  settingsOverlay.addEventListener('click', (e) => {
+    if (e.target === settingsOverlay) {
+      settingsOverlay.style.display = 'none';
+    }
+  });
+}
+
+// Load Gemini Config from local storage
+async function loadGeminiConfig() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['geminiApiKey', 'geminiModel'], (result) => {
+      geminiConfig.apiKey = result.geminiApiKey || '';
+      geminiConfig.model = result.geminiModel || 'gemini-2.5-flash';
+      resolve();
+    });
+  });
+}
+
+// Update API Warning Card Visibility
+function updateApiWarningState() {
+  if (!geminiConfig.apiKey) {
+    apiWarningCard.style.display = 'flex';
+  } else {
+    apiWarningCard.style.display = 'none';
+  }
+}
+
+// Setup Summary Feature listeners
+function setupSummaryFeatures() {
+  generateSummaryBtn.addEventListener('click', generateGeminiSummary);
+  copySummaryBtn.addEventListener('click', () => {
+    const text = summaryMarkdown.dataset.rawText;
+    if (text) copyToClipboard(text, 'copySummaryBtn');
+  });
+}
+
+// Call Gemini API to generate the summary
+async function generateGeminiSummary() {
+  const englishText = getFullEnglishText();
+  if (!englishText || englishText.trim() === '' || englishText === 'Nhấp "Bắt đầu" và nói tiếng Anh để ghi âm...') {
+    alert('Không có nội dung cuộc họp để tóm tắt. Vui lòng ghi âm trước.');
+    return;
+  }
+
+  if (!geminiConfig.apiKey) {
+    apiKeyInput.value = '';
+    settingsOverlay.style.display = 'flex';
+    alert('Vui lòng nhập Gemini API Key để tiếp tục.');
+    return;
+  }
+
+  // Show loading, hide placeholder and markdown
+  summaryPlaceholder.style.display = 'none';
+  summaryMarkdown.style.display = 'none';
+  summaryLoading.style.display = 'flex';
+  copySummaryBtn.style.display = 'none';
+
+  const lang = summaryLangSelect.value;
+  const detail = summaryDetailSelect.value;
+
+  let prompt = '';
+  if (lang === 'vi') {
+    prompt = `Bạn là một trợ lý AI ghi chép và tóm tắt cuộc họp chuyên nghiệp. Dưới đây là biên bản ghi âm cuộc họp (transcript) bằng tiếng Anh:\n\n`;
+    prompt += `"""\n${englishText}\n"""\n\n`;
+    prompt += `Hãy tạo một bản tóm tắt cuộc họp bằng **Tiếng Việt** dựa trên các yêu cầu sau:\n`;
+    if (detail === 'bullets') {
+      prompt += `- Định dạng dưới dạng các gạch đầu dòng chi tiết chia theo từng chủ đề hoặc phần chính của cuộc họp.\n`;
+      prompt += `- Nêu rõ các ý kiến phát biểu quan trọng.\n`;
+    } else if (detail === 'short') {
+      prompt += `- Viết một bản tóm tắt cực kỳ ngắn gọn, cô đọng (tối đa 2-3 đoạn văn ngắn) về nội dung chính bàn luận và kết luận chung.\n`;
+    } else if (detail === 'action') {
+      prompt += `- Liệt kê các công việc cần làm (Action Items), ai chịu trách nhiệm (nếu có đề cập), và thời hạn (nếu có).\n`;
+      prompt += `- Phân chia danh sách một cách rõ ràng dưới dạng checkbox hoặc danh sách việc cần làm.\n`;
+    }
+    prompt += `- Định dạng đầu ra bằng Markdown sạch sẽ, sử dụng tiêu đề (h2, h3), chữ in đậm để làm nổi bật các từ khóa hoặc thông tin quan trọng. Không sử dụng HTML.`;
+  } else {
+    prompt = `You are a professional meeting assistant. Here is the transcript of the meeting in English:\n\n`;
+    prompt += `"""\n${englishText}\n"""\n\n`;
+    prompt += `Please generate a meeting summary in **English** with the following requirements:\n`;
+    if (detail === 'bullets') {
+      prompt += `- Format as detailed bullet points grouped by topics or main parts discussed.\n`;
+      prompt += `- Highlight key arguments or points raised by participants.\n`;
+    } else if (detail === 'short') {
+      prompt += `- Write a highly concise summary (max 2-3 short paragraphs) explaining the core topic and final conclusions.\n`;
+    } else if (detail === 'action') {
+      prompt += `- Extract and list Action Items, including who is responsible (if mentioned) and deadlines (if mentioned).\n`;
+      prompt += `- Structure them clearly as a checklist or to-do list.\n`;
+    }
+    prompt += `- Format the output using clean Markdown, using headers (h2, h3) and bold text for emphasis. Do not use HTML.`;
+  }
+
+  const model = geminiConfig.model;
+  const apiKey = geminiConfig.apiKey;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error?.message || `HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!candidateText) {
+      throw new Error('API không trả về văn bản kết quả.');
+    }
+
+    // Render markdown to HTML safely
+    const renderedHtml = parseMarkdown(candidateText);
+    summaryMarkdown.innerHTML = renderedHtml;
+    summaryMarkdown.dataset.rawText = candidateText; // Save for copying
+    
+    // Switch displays
+    summaryLoading.style.display = 'none';
+    summaryMarkdown.style.display = 'block';
+    copySummaryBtn.style.display = 'flex';
+    
+    showStatus('Tạo tóm tắt thành công');
+  } catch (error) {
+    console.error('Gemini error:', error);
+    summaryLoading.style.display = 'none';
+    summaryPlaceholder.style.display = 'flex';
+    summaryPlaceholder.innerHTML = `<span style="color: #ef4444;">⚠️ Lỗi khi tạo tóm tắt: ${error.message}. Vui lòng kiểm tra lại API Key hoặc kết nối mạng.</span>`;
+    showStatus('Lỗi tạo tóm tắt');
+  }
+}
+
+// Simple and Safe Client-side Markdown Parser to HTML
+function parseMarkdown(md) {
+  if (!md) return '';
+  
+  // Escape HTML tags to prevent XSS
+  let html = md
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Split into lines to parse block elements
+  const lines = html.split(/\r?\n/);
+  let result = [];
+  let inList = false;
+  let listType = ''; // 'ul' or 'ol'
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+
+    // Check for headers
+    if (line.startsWith('### ')) {
+      if (inList) { result.push(`</${listType}>`); inList = false; }
+      result.push(`<h3>${parseInlineMarkdown(line.substring(4))}</h3>`);
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      if (inList) { result.push(`</${listType}>`); inList = false; }
+      result.push(`<h2>${parseInlineMarkdown(line.substring(3))}</h2>`);
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      if (inList) { result.push(`</${listType}>`); inList = false; }
+      result.push(`<h1>${parseInlineMarkdown(line.substring(2))}</h1>`);
+      continue;
+    }
+
+    // Check for blockquotes
+    if (line.startsWith('&gt; ')) {
+      if (inList) { result.push(`</${listType}>`); inList = false; }
+      result.push(`<blockquote>${parseInlineMarkdown(line.substring(5))}</blockquote>`);
+      continue;
+    }
+
+    // Check for bullet list items
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      if (!inList || listType !== 'ul') {
+        if (inList) { result.push(`</${listType}>`); }
+        result.push('<ul>');
+        inList = true;
+        listType = 'ul';
+      }
+      result.push(`<li>${parseInlineMarkdown(line.substring(2))}</li>`);
+      continue;
+    }
+
+    // Check for numbered list items (e.g., "1. Item")
+    const numListMatch = line.match(/^(\d+)\.\s+(.*)$/);
+    if (numListMatch) {
+      if (!inList || listType !== 'ol') {
+        if (inList) { result.push(`</${listType}>`); }
+        result.push('<ol>');
+        inList = true;
+        listType = 'ol';
+      }
+      result.push(`<li>${parseInlineMarkdown(numListMatch[2])}</li>`);
+      continue;
+    }
+
+    // Empty line
+    if (line === '') {
+      if (inList) {
+        result.push(`</${listType}>`);
+        inList = false;
+      }
+      continue;
+    }
+
+    // Normal paragraph line
+    if (inList) {
+      result.push(`</${listType}>`);
+      inList = false;
+    }
+    result.push(`<p>${parseInlineMarkdown(line)}</p>`);
+  }
+
+  if (inList) {
+    result.push(`</${listType}>`);
+  }
+
+  return result.join('\n');
+}
+
+function parseInlineMarkdown(text) {
+  // Parse bold **text**
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  
+  // Parse italic *text*
+  text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  
+  // Parse inline code `code`
+  text = text.replace(/`(.*?)`/g, '<code>$1</code>');
+
+  return text;
 }
 
 // Show extension status bar message
